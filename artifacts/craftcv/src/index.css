@@ -125,3 +125,21 @@
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulse-soft { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+@media print {
+  body {
+    background: #fffdf7 !important;
+    color: #334547 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  header, aside, button, nav, footer, .grain::after {
+    display: none !important;
+  }
+  [data-testid="document-cv"] {
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+}

@@ -5,8 +5,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import type { Request, Response } from "express";
-import { and, eq, gt } from "drizzle-orm";
-import { db, sessionsTable, usersTable, type User } from "@workspace/db";
+import { sessionsRepo, type User } from "@workspace/db";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = "craftcv_session";
@@ -36,7 +35,7 @@ export async function verifyPassword(
 export async function createSession(userId: string, res: Response) {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_LENGTH_MS);
-  await db.insert(sessionsTable).values({ token, userId, expiresAt });
+  sessionsRepo.create(userId, token, expiresAt);
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -49,7 +48,7 @@ export async function createSession(userId: string, res: Response) {
 export async function clearSession(req: Request, res: Response) {
   const token = req.cookies?.[SESSION_COOKIE] as string | undefined;
   if (token) {
-    await db.delete(sessionsTable).where(eq(sessionsTable.token, token));
+    sessionsRepo.delete(token);
   }
   res.clearCookie(SESSION_COOKIE, { path: "/" });
 }
@@ -57,20 +56,7 @@ export async function clearSession(req: Request, res: Response) {
 export async function getSessionUser(req: Request): Promise<User | null> {
   const token = req.cookies?.[SESSION_COOKIE] as string | undefined;
   if (!token) return null;
-
-  const rows = await db
-    .select({ user: usersTable })
-    .from(sessionsTable)
-    .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
-    .where(
-      and(
-        eq(sessionsTable.token, token),
-        gt(sessionsTable.expiresAt, new Date()),
-      ),
-    )
-    .limit(1);
-
-  return rows[0]?.user ?? null;
+  return sessionsRepo.getUserByToken(token);
 }
 
 export function publicUser(user: User) {

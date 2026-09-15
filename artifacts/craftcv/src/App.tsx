@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRight,
@@ -279,8 +281,25 @@ function CvSection({ title, children }: { title: string; children: ReactNode }) 
   return <section className="mt-5"><h4 className="mb-2 font-mono-ui text-[9px] font-medium uppercase tracking-[.17em] text-[#d86a4a]">{title}</h4>{children}</section>;
 }
 
-function downloadCv(cv: Cv) {
+async function downloadCv(cv: Cv) {
   const data = cv.cv_data;
+  const fileName = `${(data.full_name || 'craftcv').toLowerCase().replace(/\s+/g, '-')}-v${cv.version}.pdf`;
+  const element = document.querySelector('[data-testid="document-cv"]') as HTMLElement | null;
+  if (element) {
+    try {
+      const opt = {
+        margin: [0.3, 0.3, 0.3, 0.3] as [number, number, number, number],
+        filename: fileName,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#fffdf7' },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
+      };
+      await html2pdf().set(opt).from(element).save();
+      return;
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    }
+  }
   const text = `${data.full_name}\n${[data.email, data.phone, data.location, data.linkedin].filter(Boolean).join(' · ')}\n\nPROFILE\n${data.career_objective}\n\nEXPERIENCE\n${data.work_experience.map((item) => `${item.role} — ${item.company} (${item.start_date} — ${item.end_date})\n${item.responsibilities.map((entry) => `• ${entry}`).join('\n')}`).join('\n\n')}\n\nSKILLS\n${data.skills.join(' · ')}`;
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
   const anchor = document.createElement('a');

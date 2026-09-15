@@ -23,7 +23,7 @@ type GeminiResponse = {
   error?: { message?: string };
 };
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.6-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const REQUEST_TIMEOUT_MS = 20_000;
 
@@ -80,6 +80,16 @@ async function requestGemini(body: GeminiRequest): Promise<string> {
 export async function getCoachReply(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ) {
+  const contents: GeminiMessage[] = [];
+  for (const message of messages.slice(-80)) {
+    const role: GeminiRole = message.role === "assistant" ? "model" : "user";
+    if (contents.length > 0 && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts[0].text += `\n\n${message.content}`;
+    } else {
+      contents.push({ role, parts: [{ text: message.content }] });
+    }
+  }
+
   return requestGemini({
     systemInstruction: {
       parts: [
@@ -93,10 +103,7 @@ Stay focused on helping build the user's CV and do not discuss unrelated topics.
         },
       ],
     },
-    contents: messages.slice(-80).map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    })),
+    contents,
     generationConfig: { maxOutputTokens: 8192, responseMimeType: "text/plain" },
   });
 }
@@ -104,12 +111,31 @@ Stay focused on helping build the user's CV and do not discuss unrelated topics.
 export async function generateCvJson(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ) {
+  const contents: GeminiMessage[] = [];
+  for (const message of messages.slice(-80)) {
+    const role: GeminiRole = message.role === "assistant" ? "model" : "user";
+    if (contents.length > 0 && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts[0].text += `\n\n${message.content}`;
+    } else {
+      contents.push({ role, parts: [{ text: message.content }] });
+    }
+  }
+
+  if (contents.length > 0 && contents[contents.length - 1].role === "user") {
+    contents[contents.length - 1].parts[0].text += "\n\nGenerate my CV now as JSON using the specified schema.";
+  } else {
+    contents.push({
+      role: "user",
+      parts: [{ text: "Generate my CV now as JSON using the specified schema." }],
+    });
+  }
+
   const text = await requestGemini({
     systemInstruction: {
       parts: [
         {
-          text: `You are a professional CV writer. Based only on the conversation, return a CV as valid JSON and nothing else.
-Use this exact structure:
+          text: `You are a professional CV writer. Based on the conversation, extract the person's profile and return a CV as valid JSON and nothing else.
+Use this exact JSON structure:
 {
   "full_name": "",
   "email": "",
@@ -128,16 +154,7 @@ Write strong, action-led responsibility bullets. Polish grammar but never invent
         },
       ],
     },
-    contents: [
-      ...messages.slice(-80).map((message) => ({
-        role: message.role === "assistant" ? ("model" as const) : ("user" as const),
-        parts: [{ text: message.content }],
-      })),
-      {
-        role: "user",
-        parts: [{ text: "Generate my CV now as JSON." }],
-      },
-    ],
+    contents,
     generationConfig: { maxOutputTokens: 8192, responseMimeType: "application/json" },
   });
 
@@ -145,8 +162,11 @@ Write strong, action-led responsibility bullets. Polish grammar but never invent
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  const jsonString = match ? match[0] : cleaned;
+
   try {
-    return JSON.parse(cleaned) as unknown;
+    return JSON.parse(jsonString) as unknown;
   } catch {
     throw new Error("Gemini returned invalid CV JSON.");
   }
@@ -157,9 +177,16 @@ function asString(value: unknown) {
 }
 
 function asStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+  return [];
 }
 
 export function normalizeCvData(
@@ -170,40 +197,44 @@ export function normalizeCvData(
     throw new Error("Gemini returned an invalid CV object.");
   }
   const input = value as Record<string, unknown>;
-  const workExperience = Array.isArray(input.work_experience)
-    ? input.work_experience
+
+  const rawWorkExp = input.work_experience || input.experience || input.workExperience || input.jobs;
+  const workExperience = Array.isArray(rawWorkExp)
+    ? rawWorkExp
         .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
         .map((item) => ({
-          company: asString(item.company),
-          role: asString(item.role),
-          start_date: asString(item.start_date),
-          end_date: asString(item.end_date),
-          responsibilities: asStringArray(item.responsibilities),
+          company: asString(item.company || item.employer || item.organization),
+          role: asString(item.role || item.title || item.position || item.job_title),
+          start_date: asString(item.start_date || item.startDate || item.start || item.duration),
+          end_date: asString(item.end_date || item.endDate || item.end),
+          responsibilities: asStringArray(item.responsibilities || item.bullets || item.highlights || item.skills_used || item.duties),
         }))
     : [];
-  const education = Array.isArray(input.education)
-    ? input.education
+
+  const rawEdu = input.education || input.academic || input.schools;
+  const education = Array.isArray(rawEdu)
+    ? rawEdu
         .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
         .map((item) => ({
-          institution: asString(item.institution),
-          degree: asString(item.degree),
-          field: asString(item.field),
-          year: asString(item.year),
+          institution: asString(item.institution || item.school || item.university),
+          degree: asString(item.degree || item.qualification),
+          field: asString(item.field || item.major || item.subject),
+          year: asString(item.year || item.graduated || item.date),
         }))
     : [];
 
   return {
-    full_name: asString(input.full_name) || user.fullName,
+    full_name: asString(input.full_name || input.fullName || input.name) || user.fullName,
     email: asString(input.email) || user.email,
-    phone: asString(input.phone),
-    location: asString(input.location),
-    linkedin: asString(input.linkedin),
-    career_objective: asString(input.career_objective),
+    phone: asString(input.phone || input.mobile || input.contact_number),
+    location: asString(input.location || input.city || input.address),
+    linkedin: asString(input.linkedin || input.linkedin_url),
+    career_objective: asString(input.career_objective || input.summary || input.objective || input.about || input.profile || input.bio),
     work_experience: workExperience,
     education,
-    skills: asStringArray(input.skills),
-    certifications: asStringArray(input.certifications),
+    skills: asStringArray(input.skills || input.technologies || input.competencies),
+    certifications: asStringArray(input.certifications || input.certificates),
     languages: asStringArray(input.languages),
-    interests: asStringArray(input.interests),
+    interests: asStringArray(input.interests || input.hobbies),
   };
 }

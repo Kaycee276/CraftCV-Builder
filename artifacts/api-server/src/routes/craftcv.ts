@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, max } from "drizzle-orm";
 import {
   DeleteCvParams,
   GenerateCvBody,
@@ -11,7 +10,12 @@ import {
   SignInBody,
   SignUpBody,
 } from "@workspace/api-zod";
-import { db, cvsTable, messagesTable, usersTable } from "@workspace/db";
+import {
+  cvsRepo,
+  messagesRepo,
+  usersRepo,
+  type Message,
+} from "@workspace/db";
 import {
   clearSession,
   createSession,
@@ -28,10 +32,10 @@ const router: IRouter = Router();
 const welcomeMessage = (name: string) =>
   `Hi ${name.split(" ")[0]} — I'm your CV coach. Tell me a bit about yourself: what kind of work do you do, and what are you looking for?`;
 
-function toMessage(message: typeof messagesTable.$inferSelect) {
+function toMessage(message: Message) {
   return {
     id: message.id,
-    role: message.role as "user" | "assistant",
+    role: message.role,
     content: message.content,
     created_at: message.createdAt,
   };
@@ -62,24 +66,17 @@ router.post("/auth/signup", async (req, res) => {
   }
 
   const email = parsed.data.email.toLowerCase().trim();
-  const existing = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
-  if (existing.length > 0) {
+  const existing = usersRepo.findByEmail(email);
+  if (existing) {
     res.status(409).json({ error: "An account with this email already exists." });
     return;
   }
 
-  const [user] = await db
-    .insert(usersTable)
-    .values({
-      fullName,
-      email,
-      passwordHash: await hashPassword(parsed.data.password),
-    })
-    .returning();
+  const user = usersRepo.create({
+    fullName,
+    email,
+    passwordHash: await hashPassword(parsed.data.password),
+  });
   await createSession(user.id, res);
   res.status(201).json(publicUser(user));
 });
@@ -90,11 +87,7 @@ router.post("/auth/signin", async (req, res) => {
     res.status(401).json({ error: "Incorrect email or password." });
     return;
   }
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, parsed.data.email.toLowerCase().trim()))
-    .limit(1);
+  const user = usersRepo.findByEmail(parsed.data.email.toLowerCase().trim());
   if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
     res.status(401).json({ error: "Incorrect email or password." });
     return;
@@ -111,16 +104,13 @@ router.post("/auth/signout", async (req, res) => {
 router.get("/messages", async (req, res) => {
   const user = await getSessionUser(req);
   if (!requireUser(user, res)) return;
-  let messages = await db
-    .select()
-    .from(messagesTable)
-    .where(eq(messagesTable.userId, user.id))
-    .orderBy(messagesTable.createdAt);
+  let messages = messagesRepo.listByUser(user.id);
   if (messages.length === 0) {
-    const [welcome] = await db
-      .insert(messagesTable)
-      .values({ userId: user.id, role: "assistant", content: welcomeMessage(user.fullName) })
-      .returning();
+    const welcome = messagesRepo.create({
+      userId: user.id,
+      role: "assistant",
+      content: welcomeMessage(user.fullName),
+    });
     messages = [welcome];
   }
   res.json(ListMessagesResponse.parse(messages.map(toMessage)));
@@ -135,38 +125,33 @@ router.post("/chat/reply", async (req, res) => {
     return;
   }
   const content = parsed.data.content.trim();
-  const history = await db
-    .select({ role: messagesTable.role, content: messagesTable.content })
-    .from(messagesTable)
-    .where(eq(messagesTable.userId, user.id))
-    .orderBy(messagesTable.createdAt);
-  const [userMessage] = await db
-    .insert(messagesTable)
-    .values({ userId: user.id, role: "user", content })
-    .returning();
+  const history = messagesRepo.listByUser(user.id);
+  const userMessage = messagesRepo.create({
+    userId: user.id,
+    role: "user",
+    content,
+  });
   let reply: string;
   try {
     reply = await getCoachReply([
       ...history.map((message) => ({
-        role: message.role as "user" | "assistant",
+        role: message.role,
         content: message.content,
       })),
       { role: "user", content },
     ]);
-  } catch {
+  } catch (err) {
+    console.error("Gemini API Error:", err);
     res.status(502).json({
       error: "Gemini could not respond right now. Please try again.",
     });
     return;
   }
-  const [assistantMessage] = await db
-    .insert(messagesTable)
-    .values({
-      userId: user.id,
-      role: "assistant",
-      content: reply,
-    })
-    .returning();
+  const assistantMessage = messagesRepo.create({
+    userId: user.id,
+    role: "assistant",
+    content: reply,
+  });
   res.json(
     SendChatMessageResponse.parse({
       user_message: toMessage(userMessage),
@@ -178,11 +163,7 @@ router.post("/chat/reply", async (req, res) => {
 router.get("/cvs", async (req, res) => {
   const user = await getSessionUser(req);
   if (!requireUser(user, res)) return;
-  const cvs = await db
-    .select()
-    .from(cvsTable)
-    .where(eq(cvsTable.userId, user.id))
-    .orderBy(desc(cvsTable.createdAt));
+  const cvs = cvsRepo.listByUser(user.id);
   res.json(ListCvsResponse.parse(cvs.map((cv) => ({
     id: cv.id,
     version: cv.version,
@@ -199,11 +180,7 @@ router.get("/cvs/:id", async (req, res) => {
     res.status(404).json({ error: "CV not found." });
     return;
   }
-  const [cv] = await db
-    .select()
-    .from(cvsTable)
-    .where(and(eq(cvsTable.id, parsed.data.id), eq(cvsTable.userId, user.id)))
-    .limit(1);
+  const cv = cvsRepo.getById(parsed.data.id, user.id);
   if (!cv) {
     res.status(404).json({ error: "CV not found." });
     return;
@@ -219,11 +196,8 @@ router.delete("/cvs/:id", async (req, res) => {
     res.status(404).json({ error: "CV not found." });
     return;
   }
-  const deleted = await db
-    .delete(cvsTable)
-    .where(and(eq(cvsTable.id, parsed.data.id), eq(cvsTable.userId, user.id)))
-    .returning({ id: cvsTable.id });
-  if (deleted.length === 0) {
+  const deleted = cvsRepo.delete(parsed.data.id, user.id);
+  if (!deleted) {
     res.status(404).json({ error: "CV not found." });
     return;
   }
@@ -238,37 +212,32 @@ router.post("/cvs/generate", async (req, res) => {
     res.status(400).json({ error: "Chat with your CV coach first — tell me about yourself." });
     return;
   }
-  const messages = await db
-    .select({ role: messagesTable.role, content: messagesTable.content })
-    .from(messagesTable)
-    .where(eq(messagesTable.userId, user.id))
-    .orderBy(messagesTable.createdAt);
+  const messages = messagesRepo.listByUser(user.id);
   let cvData: unknown;
   try {
     cvData = normalizeCvData(
       await generateCvJson(
         messages.map((message) => ({
-          role: message.role as "user" | "assistant",
+          role: message.role,
           content: message.content,
         })),
       ),
       user,
     );
-  } catch {
+  } catch (err) {
+    console.error("Generate CV Error:", err);
     res.status(502).json({
       error: "Gemini could not generate your CV right now. Please try again.",
     });
     return;
   }
-  const [latest] = await db
-    .select({ value: max(cvsTable.version) })
-    .from(cvsTable)
-    .where(eq(cvsTable.userId, user.id));
-  const version = (latest?.value ?? 0) + 1;
-  const [cv] = await db
-    .insert(cvsTable)
-    .values({ userId: user.id, version, cvData })
-    .returning();
+  const maxVersion = cvsRepo.getMaxVersion(user.id);
+  const version = maxVersion + 1;
+  const cv = cvsRepo.create({
+    userId: user.id,
+    version,
+    cvData,
+  });
   res.status(201).json({
     id: cv.id,
     version: cv.version,
@@ -280,7 +249,7 @@ router.post("/cvs/generate", async (req, res) => {
 router.delete("/account", async (req, res) => {
   const user = await getSessionUser(req);
   if (!requireUser(user, res)) return;
-  await db.delete(usersTable).where(eq(usersTable.id, user.id));
+  usersRepo.delete(user.id);
   await clearSession(req, res);
   res.status(204).end();
 });
