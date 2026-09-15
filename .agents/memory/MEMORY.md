@@ -1,0 +1,1 @@
+- [AI provider availability](ai-provider-availability.md) — CraftCV uses a local coach until a server-side AI provider is available.

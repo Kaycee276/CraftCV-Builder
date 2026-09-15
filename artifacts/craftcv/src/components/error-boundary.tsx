@@ -4,6 +4,7 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
+import { RefreshCw, TriangleAlert } from 'lucide-react';
 
 export interface ErrorFallbackProps {
   error: Error;
@@ -37,27 +38,24 @@ function toError(value: unknown): Error {
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 p-6">
-      <div className="max-w-lg w-full text-center">
-        <h1 className="text-xl font-semibold text-gray-900">
-          Something went wrong
-        </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          This part of the app hit an error. The rest of the app is still
-          running.
-        </p>
+    <div className="grain flex min-h-[100dvh] w-full items-center justify-center bg-[#f4f0e8] p-6">
+      <div className="w-full max-w-lg text-center">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#fbebe6] text-[#b94b43]"><TriangleAlert size={24} /></span>
+        <p className="mt-7 font-mono-ui text-[11px] uppercase tracking-[.2em] text-[#d86a4a]">A page lost its thread</p>
+        <h1 className="mt-3 font-display text-5xl font-semibold tracking-[-.05em] text-[#25363a]">Let’s try that again.</h1>
+        <p className="mx-auto mt-4 max-w-sm text-sm leading-6 text-[#697674]">This part of the workspace hit an unexpected snag. Your saved work is still safe.</p>
         {/* Dev only: messages can carry API responses and other internals. */}
         {import.meta.env.DEV ? (
-          <pre className="mt-4 overflow-x-auto rounded bg-gray-100 p-3 text-left text-xs text-gray-800">
+          <pre className="mt-5 overflow-x-auto rounded-xl border border-[#e2b9ad] bg-[#fff8f5] p-3 text-left text-xs text-[#713c38]">
             {error.message || String(error)}
           </pre>
         ) : null}
         <button
           type="button"
           onClick={resetError}
-          className="mt-4 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700"
+          className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#25363a] px-4 py-3 text-sm font-semibold text-[#f7f0e4] transition-transform hover:-translate-y-0.5"
         >
-          Try again
+          <RefreshCw size={15} /> Try again
         </button>
       </div>
     </div>

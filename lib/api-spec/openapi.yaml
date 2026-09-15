@@ -10,6 +10,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Email and password authentication
+  - name: chat
+    description: Conversational CV coaching
+  - name: cvs
+    description: Generated CV versions
+  - name: account
+    description: Account management
 paths:
   /healthz:
     get:
@@ -24,7 +32,191 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the signed-in user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not signed in
+  /auth/signup:
+    post:
+      operationId: signUp
+      tags: [auth]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignUpInput"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid input
+        "409":
+          description: Email already exists
+  /auth/signin:
+    post:
+      operationId: signIn
+      tags: [auth]
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignInInput"
+      responses:
+        "200":
+          description: Signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Incorrect credentials
+  /auth/signout:
+    post:
+      operationId: signOut
+      tags: [auth]
+      summary: End the current session
+      responses:
+        "204":
+          description: Signed out
+  /messages:
+    get:
+      operationId: listMessages
+      tags: [chat]
+      summary: Load the current user's conversation
+      responses:
+        "200":
+          description: Conversation messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+        "401":
+          description: Not signed in
+  /chat/reply:
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Save a user message and receive a coach reply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageInput"
+      responses:
+        "200":
+          description: Saved user message and assistant reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatReply"
+        "400":
+          description: Invalid message
+        "401":
+          description: Not signed in
+  /cvs:
+    get:
+      operationId: listCvs
+      tags: [cvs]
+      summary: List generated CV versions
+      responses:
+        "200":
+          description: CV versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cv"
+        "401":
+          description: Not signed in
+  /cvs/{id}:
+    get:
+      operationId: getCv
+      tags: [cvs]
+      summary: Get a generated CV
+      parameters:
+        - $ref: "#/components/parameters/CvId"
+      responses:
+        "200":
+          description: CV
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cv"
+        "404":
+          description: CV not found
+    delete:
+      operationId: deleteCv
+      tags: [cvs]
+      summary: Delete a generated CV version
+      parameters:
+        - $ref: "#/components/parameters/CvId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: CV not found
+  /cvs/generate:
+    post:
+      operationId: generateCv
+      tags: [cvs]
+      summary: Generate and save a CV from the conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CvGenerationInput"
+      responses:
+        "201":
+          description: Generated CV
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cv"
+        "400":
+          description: Not enough conversation
+        "401":
+          description: Not signed in
+  /account:
+    delete:
+      operationId: deleteAccount
+      tags: [account]
+      summary: Permanently delete the current account
+      responses:
+        "204":
+          description: Account deleted
+        "401":
+          description: Not signed in
 components:
+  parameters:
+    CvId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +225,107 @@ components:
           type: string
       required:
         - status
+    User:
+      type: object
+      required: [id, full_name, email]
+      properties:
+        id: { type: string }
+        full_name: { type: string }
+        email: { type: string, format: email }
+    SignUpInput:
+      type: object
+      required: [full_name, email, password]
+      properties:
+        full_name: { type: string, minLength: 2, maxLength: 60 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    SignInInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    Message:
+      type: object
+      required: [id, role, content, created_at]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        created_at: { type: string, format: date-time }
+    ChatMessageInput:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 1000 }
+    ChatReply:
+      type: object
+      required: [user_message, assistant_message]
+      properties:
+        user_message: { $ref: "#/components/schemas/Message" }
+        assistant_message: { $ref: "#/components/schemas/Message" }
+    CvWorkExperience:
+      type: object
+      required: [company, role, start_date, end_date, responsibilities]
+      properties:
+        company: { type: string }
+        role: { type: string }
+        start_date: { type: string }
+        end_date: { type: string }
+        responsibilities:
+          type: array
+          items: { type: string }
+    CvEducation:
+      type: object
+      required: [institution, degree, field, year]
+      properties:
+        institution: { type: string }
+        degree: { type: string }
+        field: { type: string }
+        year: { type: string }
+    CvData:
+      type: object
+      required:
+        [full_name, email, phone, location, linkedin, career_objective,
+         work_experience, education, skills, certifications, languages, interests]
+      properties:
+        full_name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        location: { type: string }
+        linkedin: { type: string }
+        career_objective: { type: string }
+        work_experience:
+          type: array
+          items: { $ref: "#/components/schemas/CvWorkExperience" }
+        education:
+          type: array
+          items: { $ref: "#/components/schemas/CvEducation" }
+        skills:
+          type: array
+          items: { type: string }
+        certifications:
+          type: array
+          items: { type: string }
+        languages:
+          type: array
+          items: { type: string }
+        interests:
+          type: array
+          items: { type: string }
+    Cv:
+      type: object
+      required: [id, version, cv_data, created_at]
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        cv_data: { $ref: "#/components/schemas/CvData" }
+        created_at: { type: string, format: date-time }
+    CvGenerationInput:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
 
