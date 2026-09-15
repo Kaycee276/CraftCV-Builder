@@ -34,7 +34,7 @@ CraftCV helps job seekers turn a conversation about their experience into a poli
 - Email/password auth uses server-side scrypt hashes and database-backed httpOnly cookie sessions.
 - Google OAuth and password reset are intentionally not included in this first build.
 - CV versions are append-only; each generation creates a new version instead of overwriting history.
-- The coach and CV extraction run locally in the API with deterministic guidance until an AI provider key is available.
+- Gemini powers both the coach replies and structured CV extraction from the server; the browser never receives the API key.
 
 ## Product
 
@@ -48,12 +48,14 @@ CraftCV helps job seekers turn a conversation about their experience into a poli
 
 - Keep data local for now.
 - Use email and password authentication instead of Google OAuth.
+- Use Gemini for conversational coaching and CV generation.
 
 ## Gotchas
 
 - Run API codegen after changing `lib/api-spec/openapi.yaml`.
 - Run `pnpm --filter @workspace/db run push` after changing `lib/db/src/schema/`.
 - The API is routed under `/api`; the web app uses relative API URLs and cookie sessions.
+- `GEMINI_API_KEY` must exist as a project secret for chat replies and CV generation.
 
 ## Pointers
 

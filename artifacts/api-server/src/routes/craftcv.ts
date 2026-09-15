@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, max } from "drizzle-orm";
 import {
-  CvData,
   DeleteCvParams,
   GenerateCvBody,
   GetCvParams,
@@ -12,7 +11,7 @@ import {
   SignInBody,
   SignUpBody,
 } from "@workspace/api-zod";
-import { db, cvsTable, messagesTable, sessionsTable, usersTable } from "@workspace/db";
+import { db, cvsTable, messagesTable, usersTable } from "@workspace/db";
 import {
   clearSession,
   createSession,
@@ -22,6 +21,7 @@ import {
   requireUser,
   verifyPassword,
 } from "../lib/auth";
+import { generateCvJson, getCoachReply, normalizeCvData } from "../lib/gemini";
 
 const router: IRouter = Router();
 
@@ -34,112 +34,6 @@ function toMessage(message: typeof messagesTable.$inferSelect) {
     role: message.role as "user" | "assistant",
     content: message.content,
     created_at: message.createdAt,
-  };
-}
-
-function coachReply(content: string, messageCount: number) {
-  const lower = content.toLowerCase();
-  if (lower.includes("worked") || lower.includes("experience")) {
-    return "That is useful context. What was your exact role, and can you share one result you achieved there with a number if possible?";
-  }
-  if (lower.includes("school") || lower.includes("university") || lower.includes("degree")) {
-    return "Great — education helps round out the story. What did you study, where did you study it, and when did you complete it?";
-  }
-  if (lower.includes("skill") || lower.includes("javascript") || lower.includes("excel")) {
-    return "Let’s make those skills concrete. Which ones do you use most confidently, and where have you used them in real work or projects?";
-  }
-  if (messageCount < 4) {
-    return "Thanks for sharing that. What have you been responsible for day to day, and what kind of role would you like next?";
-  }
-  return "I’m capturing that. What is one achievement, certification, language, or personal strength you would like a hiring manager to remember?";
-}
-
-function splitList(value: string) {
-  return value
-    .split(/,| and |\/|\|/)
-    .map((item) => item.trim().replace(/[.!?]+$/, ""))
-    .filter((item) => item.length > 1 && item.length < 50);
-}
-
-function buildCvData(
-  user: { fullName: string; email: string },
-  messages: Array<{ role: string; content: string }>,
-): CvData {
-  const userText = messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content)
-    .join("\n");
-  const phone = userText.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0]?.trim() ?? "";
-  const linkedin =
-    userText.match(/https?:\/\/(?:www\.)?linkedin\.com\/[^\s)]+/i)?.[0] ?? "";
-  const locationMatch = userText.match(
-    /(?:based|located|living|live)\s+(?:in|at)\s+([A-Z][A-Za-z .'-]{2,40})/,
-  );
-  const skillsMatch = userText.match(
-    /(?:skills?|proficient in|skilled in)[:\s]+([^.!?\n]+)/i,
-  );
-  const languagesMatch = userText.match(
-    /(?:languages?|speak)[:\s]+([^.!?\n]+)/i,
-  );
-  const educationMatch = userText.match(
-    /(?:studied|degree|graduated|university|college)\s+([^.!?\n]+)/i,
-  );
-  const experienceMatch = userText.match(
-    /(?:worked at|work at|experience at|joined)\s+([A-Z][A-Za-z0-9& .'-]{2,50})(?:\s+as\s+|\s*[-—]\s*)([A-Za-z][A-Za-z /&'-]{2,50})/i,
-  );
-  const responsibilities = messages
-    .filter((message) => message.role === "user")
-    .flatMap((message) =>
-      message.content
-        .split(/[.!?\n]/)
-        .map((sentence) => sentence.trim())
-        .filter((sentence) => sentence.length > 35 && sentence.length < 180)
-        .slice(0, 2),
-    )
-    .slice(0, 4);
-
-  const firstGoal = messages
-    .filter((message) => message.role === "user")
-    .find((message) => /looking|want|seeking|goal|role/i.test(message.content));
-  const objective = firstGoal
-    ? firstGoal.content.replace(/\s+/g, " ").trim()
-    : "Professional with a practical, hands-on approach and a track record of learning quickly, contributing reliably, and building strong working relationships.";
-
-  return {
-    full_name: user.fullName,
-    email: user.email,
-    phone,
-    location: locationMatch?.[1]?.trim() ?? "",
-    linkedin,
-    career_objective: objective,
-    work_experience: experienceMatch
-      ? [
-          {
-            company: experienceMatch[1].trim(),
-            role: experienceMatch[2].trim(),
-            start_date: "",
-            end_date: "",
-            responsibilities:
-              responsibilities.length > 0
-                ? responsibilities
-                : ["Contributed to day-to-day responsibilities and team goals."],
-          },
-        ]
-      : [],
-    education: educationMatch
-      ? [
-          {
-            institution: educationMatch[1].trim(),
-            degree: "",
-            field: "",
-            year: "",
-          },
-        ]
-      : [],
-    skills: skillsMatch ? splitList(skillsMatch[1]) : [],
-    certifications: [],
-    languages: languagesMatch ? splitList(languagesMatch[1]) : [],
-    interests: [],
   };
 }
 
@@ -241,20 +135,36 @@ router.post("/chat/reply", async (req, res) => {
     return;
   }
   const content = parsed.data.content.trim();
-  const existing = await db
-    .select({ count: messagesTable.id })
+  const history = await db
+    .select({ role: messagesTable.role, content: messagesTable.content })
     .from(messagesTable)
-    .where(eq(messagesTable.userId, user.id));
+    .where(eq(messagesTable.userId, user.id))
+    .orderBy(messagesTable.createdAt);
   const [userMessage] = await db
     .insert(messagesTable)
     .values({ userId: user.id, role: "user", content })
     .returning();
+  let reply: string;
+  try {
+    reply = await getCoachReply([
+      ...history.map((message) => ({
+        role: message.role as "user" | "assistant",
+        content: message.content,
+      })),
+      { role: "user", content },
+    ]);
+  } catch {
+    res.status(502).json({
+      error: "Gemini could not respond right now. Please try again.",
+    });
+    return;
+  }
   const [assistantMessage] = await db
     .insert(messagesTable)
     .values({
       userId: user.id,
       role: "assistant",
-      content: coachReply(content, existing.length + 1),
+      content: reply,
     })
     .returning();
   res.json(
@@ -333,7 +243,23 @@ router.post("/cvs/generate", async (req, res) => {
     .from(messagesTable)
     .where(eq(messagesTable.userId, user.id))
     .orderBy(messagesTable.createdAt);
-  const cvData = buildCvData(user, messages);
+  let cvData: unknown;
+  try {
+    cvData = normalizeCvData(
+      await generateCvJson(
+        messages.map((message) => ({
+          role: message.role as "user" | "assistant",
+          content: message.content,
+        })),
+      ),
+      user,
+    );
+  } catch {
+    res.status(502).json({
+      error: "Gemini could not generate your CV right now. Please try again.",
+    });
+    return;
+  }
   const [latest] = await db
     .select({ value: max(cvsTable.version) })
     .from(cvsTable)
