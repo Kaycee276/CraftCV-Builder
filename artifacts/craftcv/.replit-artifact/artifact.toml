@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CraftCV"
+description = "An AI-powered conversational CV builder for job seekers. Users create an account, talk with a career coach, generate a polished CV, download it as a PDF, and manage version history."
+version = "1.0.0"
+id = "artifacts/craftcv"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22179
+
+[services.development]
+run = "pnpm --filter @workspace/craftcv run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/craftcv", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/craftcv/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22179"
+BASE_PATH = "/"
