@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -226,10 +226,13 @@ function Shell({ children }: { children: ReactNode }) {
   const nav = [{ href: '/chat', label: 'Conversation', icon: MessageCircle }, { href: '/history', label: 'Saved CVs', icon: History }, { href: '/settings', label: 'Settings', icon: SettingsIcon }];
   const logout = () => signOut.mutate(undefined, { onSuccess: () => setLocation('/') });
   return (
-    <div className="grain min-h-[100dvh] bg-[#f4f0e8] lg:grid lg:grid-cols-[248px_1fr]">
-      <aside className={`${mobileOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col bg-[#25363a] p-5 text-[#f7f0e4] transition-transform duration-300 lg:static lg:translate-x-0`}><div className="flex items-center justify-between"><Logo inverse /><button type="button" className="rounded-lg p-2 text-[#a7b5ae] hover:bg-[#31484c] lg:hidden" onClick={() => setMobileOpen(false)} data-testid="button-close-menu"><X size={19} /></button></div><div className="mt-12"><p className="px-3 font-mono-ui text-[10px] uppercase tracking-[.18em] text-[#779087]">Your workspace</p><nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMobileOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors ${location === href ? 'bg-[#3c5558] text-[#f7f0e4]' : 'text-[#a7b5ae] hover:bg-[#31484c] hover:text-[#f7f0e4]'}`} data-testid={`link-sidebar-${label.toLowerCase().replace(' ', '-')}`}><Icon size={18} strokeWidth={1.8} /><span>{label}</span>{location === href ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#e78062]" /> : null}</Link>)}</nav></div><div className="mt-auto border-t border-[#3b5052] pt-4"><div className="flex items-center gap-3 px-3 py-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d86a4a] font-mono-ui text-[11px] font-semibold text-[#fff7ed]">{initials}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{current.data.full_name}</p><p className="truncate text-[11px] text-[#91a39b]">{current.data.email}</p></div></div><button type="button" onClick={logout} disabled={signOut.isPending} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[#a7b5ae] transition-colors hover:bg-[#31484c] hover:text-[#f7f0e4]" data-testid="button-signout"><LogOut size={17} />Sign out</button></div></aside>
+    <div className="grain h-[100dvh] max-h-[100dvh] bg-[#f4f0e8] lg:grid lg:grid-cols-[248px_1fr] overflow-hidden">
+      <aside className={`${mobileOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col bg-[#25363a] p-5 text-[#f7f0e4] transition-transform duration-300 lg:static lg:translate-x-0 h-full`}><div className="flex items-center justify-between"><Logo inverse /><button type="button" className="rounded-lg p-2 text-[#a7b5ae] hover:bg-[#31484c] lg:hidden" onClick={() => setMobileOpen(false)} data-testid="button-close-menu"><X size={19} /></button></div><div className="mt-12"><p className="px-3 font-mono-ui text-[10px] uppercase tracking-[.18em] text-[#779087]">Your workspace</p><nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMobileOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors ${location === href ? 'bg-[#3c5558] text-[#f7f0e4]' : 'text-[#a7b5ae] hover:bg-[#31484c] hover:text-[#f7f0e4]'}`} data-testid={`link-sidebar-${label.toLowerCase().replace(' ', '-')}`}><Icon size={18} strokeWidth={1.8} /><span>{label}</span>{location === href ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#e78062]" /> : null}</Link>)}</nav></div><div className="mt-auto border-t border-[#3b5052] pt-4"><div className="flex items-center gap-3 px-3 py-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d86a4a] font-mono-ui text-[11px] font-semibold text-[#fff7ed]">{initials}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{current.data.full_name}</p><p className="truncate text-[11px] text-[#91a39b]">{current.data.email}</p></div></div><button type="button" onClick={logout} disabled={signOut.isPending} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[#a7b5ae] transition-colors hover:bg-[#31484c] hover:text-[#f7f0e4]" data-testid="button-signout"><LogOut size={17} />Sign out</button></div></aside>
       {mobileOpen ? <button className="fixed inset-0 z-30 bg-[#25363a]/40 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close navigation" data-testid="button-overlay-menu" /> : null}
-      <div className="min-w-0"><header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-[#ddd5c7] bg-[#f4f0e8]/90 px-5 backdrop-blur-md md:px-9"><button type="button" className="rounded-lg p-2 text-[#496067] hover:bg-[#e9e4da] lg:hidden" onClick={() => setMobileOpen(true)} data-testid="button-open-menu"><Menu size={21} /></button><div className="hidden text-sm font-semibold text-[#65716d] lg:block">{location === '/chat' ? 'A room to think out loud' : location === '/history' ? 'Your saved work' : 'Workspace settings'}</div><div className="ml-auto flex items-center gap-3"><span className="hidden text-right text-xs text-[#65716d] sm:block"><span className="block font-semibold text-[#31474b]">{current.data.full_name}</span><span>CraftCV workspace</span></span><span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfbfa9] bg-[#efe4d0] font-mono-ui text-[11px] font-semibold text-[#8c523e]">{initials}</span></div></header><main className="mx-auto max-w-[1440px] px-5 py-7 md:px-9 md:py-10">{children}</main></div>
+      <div className="min-w-0 flex flex-col h-full overflow-hidden">
+        <header className="sticky top-0 z-20 flex h-[72px] shrink-0 items-center justify-between border-b border-[#ddd5c7] bg-[#f4f0e8]/90 px-5 backdrop-blur-md md:px-9"><button type="button" className="rounded-lg p-2 text-[#496067] hover:bg-[#e9e4da] lg:hidden" onClick={() => setMobileOpen(true)} data-testid="button-open-menu"><Menu size={21} /></button><div className="hidden text-sm font-semibold text-[#65716d] lg:block">{location === '/chat' ? 'A room to think out loud' : location === '/history' ? 'Your saved work' : 'Workspace settings'}</div><div className="ml-auto flex items-center gap-3"><span className="hidden text-right text-xs text-[#65716d] sm:block"><span className="block font-semibold text-[#31474b]">{current.data.full_name}</span><span>CraftCV workspace</span></span><span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfbfa9] bg-[#efe4d0] font-mono-ui text-[11px] font-semibold text-[#8c523e]">{initials}</span></div></header>
+        <main className={`mx-auto w-full max-w-[1440px] px-5 md:px-9 ${location === '/chat' ? 'flex-1 min-h-0 py-4 overflow-hidden flex flex-col' : 'py-7 md:py-10 overflow-y-auto flex-1'}`}>{children}</main>
+      </div>
     </div>
   );
 }
@@ -250,17 +253,128 @@ function ChatPage() {
   const [draft, setDraft] = useState('');
   const [cv, setCv] = useState<Cv | null>(null);
   const [mobilePreview, setMobilePreview] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   const messages = messagesQuery.data ?? [];
   const sorted = useMemo(() => [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()), [messages]);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [sorted.length, send.isPending]);
+
+  const submit = (event?: FormEvent) => {
+    if (event) event.preventDefault();
     const content = draft.trim();
     if (!content || send.isPending) return;
     setDraft('');
     send.mutate({ data: { content } }, { onSuccess: (reply) => queryClient.setQueryData<Message[]>(getListMessagesQueryKey(), (old = []) => [...old, reply.user_message, reply.assistant_message]) });
   };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+    }
+  };
+
   const makeCv = () => generate.mutate({ data: { messages: sorted } }, { onSuccess: (result) => { setCv(result); queryClient.invalidateQueries({ queryKey: getListCvsQueryKey() }); } });
-  return <div className="animate-fade"><div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="font-mono-ui text-[11px] uppercase tracking-[.18em] text-[#d86a4a]">The conversation</p><h1 className="mt-2 font-display text-4xl font-semibold leading-none tracking-[-.045em] text-[#25363a] md:text-5xl">Tell me about the work.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-[#697674]">Start anywhere. I’ll ask the next useful question and keep track of the details that make your experience yours.</p></div><button type="button" onClick={() => setMobilePreview((value) => !value)} className="inline-flex items-center gap-2 self-start rounded-xl border border-[#cfc7b9] bg-[#faf6ee] px-4 py-2.5 text-sm font-semibold text-[#496067] lg:hidden" data-testid="button-toggle-preview"><FileText size={16} />{mobilePreview ? 'Hide CV preview' : 'Show CV preview'}</button></div><div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,.83fr)]"><section className={`${mobilePreview ? 'hidden lg:block' : ''} flex min-h-[600px] flex-col rounded-2xl border border-[#d8d1c3] bg-[#eee8dc] p-4 shadow-[0_8px_24px_rgba(37,54,58,.05)] md:p-6`}><div className="flex items-center justify-between border-b border-[#d8d1c3] pb-4"><div className="flex items-center gap-2 text-sm font-semibold text-[#31474b]"><span className="h-2 w-2 animate-pulse-soft rounded-full bg-[#d86a4a]" />Live conversation</div><span className="font-mono-ui text-[10px] text-[#89918b]">{sorted.length} {sorted.length === 1 ? 'note' : 'notes'}</span></div><div className="flex-1 space-y-5 overflow-y-auto py-6">{messagesQuery.isLoading ? <div className="space-y-4" data-testid="status-messages-loading"><div className="h-14 w-4/5 animate-pulse rounded-2xl bg-[#e0d9cb]" /><div className="ml-auto h-12 w-3/5 animate-pulse rounded-2xl bg-[#d5e0d8]" /><div className="h-20 w-3/4 animate-pulse rounded-2xl bg-[#e0d9cb]" /></div> : messagesQuery.isError ? <ErrorState onRetry={() => messagesQuery.refetch()} /> : sorted.length === 0 ? <div className="flex h-full min-h-[370px] flex-col items-center justify-center px-8 text-center" data-testid="empty-conversation"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#dfe9df] text-[#607a6e]"><MessageCircle size={23} /></span><h2 className="mt-5 font-display text-2xl font-semibold text-[#31474b]">Let’s find your throughline.</h2><p className="mt-2 max-w-sm text-sm leading-6 text-[#71807a]">What is one piece of work you’re proud of? It can be a project, a problem you untangled, or a moment you changed the direction.</p></div> : sorted.map((message) => <MessageBubble key={message.id} message={message} />)}{send.isPending ? <div className="flex gap-3" data-testid="status-chat-loading"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#dfe9df] text-[#607a6e]"><Sparkles size={15} /></span><div className="rounded-2xl rounded-tl-sm bg-[#f8f4ec] px-4 py-3 text-sm text-[#65716d]"><span className="animate-pulse-soft">Thinking through that…</span></div></div> : null}{send.error ? <p className="text-sm text-[#b94b43]" data-testid="status-chat-error">That message could not be saved. Please try again.</p> : null}</div><form onSubmit={submit} className="relative mt-auto border-t border-[#d8d1c3] pt-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} maxLength={1000} placeholder="Write it as you remember it…" className="w-full resize-none rounded-xl border border-[#cbc2b3] bg-[#faf7f0] p-4 pr-14 text-sm leading-6 text-[#25363a] outline-none placeholder:text-[#929b94] focus:border-[#d86a4a] focus:ring-4 focus:ring-[#d86a4a]/10" data-testid="input-chat-message" /><button type="submit" disabled={!draft.trim() || send.isPending} className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-lg bg-[#d86a4a] text-[#fff7ed] transition-transform hover:-translate-y-0.5 disabled:opacity-40" data-testid="button-send-message"><ArrowUpRight size={18} /></button><div className="mt-2 flex justify-between px-1 text-[10px] text-[#949a94]"><span>Press send when it feels right.</span><span>{draft.length}/1000</span></div></form></section><section className={`${mobilePreview ? '' : 'hidden lg:block'} rounded-2xl border border-[#d8d1c3] bg-[#e5ded2] p-4 md:p-6`}><div className="mb-4 flex items-center justify-between"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.18em] text-[#d86a4a]">Your CV, in progress</p><h2 className="mt-1 font-display text-2xl font-semibold text-[#25363a]">The page taking shape</h2></div><span className="rounded-full bg-[#dfe9df] px-2.5 py-1 font-mono-ui text-[9px] uppercase tracking-[.12em] text-[#607a6e]">{cv ? 'Saved' : 'Preview'}</span></div><CvPreview cv={cv} /><div className="mt-4 flex gap-2">{cv ? <Button variant="outline" className="flex-1" onClick={() => downloadCv(cv)} data-testid="button-download-generated"><Download size={15} />Download</Button> : null}<Button className="flex-1" disabled={sorted.length === 0 || generate.isPending} onClick={makeCv} data-testid="button-generate-cv">{generate.isPending ? <LoaderCircle size={16} className="animate-spin" /> : <Sparkles size={16} />}{generate.isPending ? 'Shaping your CV…' : cv ? 'Save a new version' : 'Generate my CV'}</Button></div>{generate.error ? <p className="mt-3 text-center text-xs text-[#b94b43]" data-testid="status-generate-error">We couldn’t shape that version. Try again in a moment.</p> : null}</section></div></div>;
+
+  return (
+    <div className="animate-fade flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="mb-4 shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div>
+          <p className="font-mono-ui text-[11px] uppercase tracking-[.18em] text-[#d86a4a]">The conversation</p>
+          <h1 className="mt-1 font-display text-3xl font-semibold leading-none tracking-[-.045em] text-[#25363a] md:text-4xl">Tell me about the work.</h1>
+          <p className="mt-2 max-w-xl text-xs leading-5 text-[#697674]">Start anywhere. I’ll ask the next useful question and keep track of the details that make your experience yours.</p>
+        </div>
+        <button type="button" onClick={() => setMobilePreview((value) => !value)} className="inline-flex items-center gap-2 self-start rounded-xl border border-[#cfc7b9] bg-[#faf6ee] px-4 py-2.5 text-sm font-semibold text-[#496067] lg:hidden" data-testid="button-toggle-preview">
+          <FileText size={16} />{mobilePreview ? 'Hide CV preview' : 'Show CV preview'}
+        </button>
+      </div>
+      <div className="grid flex-1 min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,.83fr)] overflow-hidden">
+        <section className={`${mobilePreview ? 'hidden lg:flex' : 'flex'} flex-col h-full min-h-0 rounded-2xl border border-[#d8d1c3] bg-[#eee8dc] p-4 shadow-[0_8px_24px_rgba(37,54,58,.05)] md:p-6 overflow-hidden`}>
+          <div className="flex shrink-0 items-center justify-between border-b border-[#d8d1c3] pb-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#31474b]">
+              <span className="h-2 w-2 animate-pulse-soft rounded-full bg-[#d86a4a]" />Live conversation
+            </div>
+            <span className="font-mono-ui text-[10px] text-[#89918b]">{sorted.length} {sorted.length === 1 ? 'note' : 'notes'}</span>
+          </div>
+          <div className="flex-1 min-h-0 space-y-5 overflow-y-auto py-4 pr-1">
+            {messagesQuery.isLoading ? (
+              <div className="space-y-4" data-testid="status-messages-loading">
+                <div className="h-14 w-4/5 animate-pulse rounded-2xl bg-[#e0d9cb]" />
+                <div className="ml-auto h-12 w-3/5 animate-pulse rounded-2xl bg-[#d5e0d8]" />
+                <div className="h-20 w-3/4 animate-pulse rounded-2xl bg-[#e0d9cb]" />
+              </div>
+            ) : messagesQuery.isError ? (
+              <ErrorState onRetry={() => messagesQuery.refetch()} />
+            ) : sorted.length === 0 ? (
+              <div className="flex h-full min-h-[250px] flex-col items-center justify-center px-8 text-center" data-testid="empty-conversation">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#dfe9df] text-[#607a6e]">
+                  <MessageCircle size={23} />
+                </span>
+                <h2 className="mt-5 font-display text-2xl font-semibold text-[#31474b]">Let’s find your throughline.</h2>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-[#71807a]">What is one piece of work you’re proud of? It can be a project, a problem you untangled, or a moment you changed the direction.</p>
+              </div>
+            ) : (
+              sorted.map((message) => <MessageBubble key={message.id} message={message} />)
+            )}
+            {send.isPending ? (
+              <div className="flex gap-3" data-testid="status-chat-loading">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#dfe9df] text-[#607a6e]">
+                  <Sparkles size={15} />
+                </span>
+                <div className="rounded-2xl rounded-tl-sm bg-[#f8f4ec] px-4 py-3 text-sm text-[#65716d]">
+                  <span className="animate-pulse-soft">Thinking through that…</span>
+                </div>
+              </div>
+            ) : null}
+            {send.error ? <p className="text-sm text-[#b94b43]" data-testid="status-chat-error">That message could not be saved. Please try again.</p> : null}
+            <div ref={chatEndRef} />
+          </div>
+          <form onSubmit={submit} className="relative shrink-0 border-t border-[#d8d1c3] pt-3">
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={3}
+              maxLength={1000}
+              placeholder="Write it as you remember it…"
+              className="w-full resize-none rounded-xl border border-[#cbc2b3] bg-[#faf7f0] p-4 pr-14 text-sm leading-6 text-[#25363a] outline-none placeholder:text-[#929b94] focus:border-[#d86a4a] focus:ring-4 focus:ring-[#d86a4a]/10"
+              data-testid="input-chat-message"
+            />
+            <button type="submit" disabled={!draft.trim() || send.isPending} className="absolute bottom-5 right-3 flex h-9 w-9 items-center justify-center rounded-lg bg-[#d86a4a] text-[#fff7ed] transition-transform hover:-translate-y-0.5 disabled:opacity-40" data-testid="button-send-message">
+              <ArrowUpRight size={18} />
+            </button>
+            <div className="mt-1 flex justify-between px-1 text-[10px] text-[#949a94]">
+              <span>Press Enter to send.</span>
+              <span>{draft.length}/1000</span>
+            </div>
+          </form>
+        </section>
+        <section className={`${mobilePreview ? 'flex' : 'hidden lg:flex'} flex-col h-full min-h-0 rounded-2xl border border-[#d8d1c3] bg-[#e5ded2] p-4 md:p-6 overflow-hidden`}>
+          <div className="mb-3 flex shrink-0 items-center justify-between">
+            <div>
+              <p className="font-mono-ui text-[10px] uppercase tracking-[.18em] text-[#d86a4a]">Your CV, in progress</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold text-[#25363a]">The page taking shape</h2>
+            </div>
+            <span className="rounded-full bg-[#dfe9df] px-2.5 py-1 font-mono-ui text-[9px] uppercase tracking-[.12em] text-[#607a6e]">{cv ? 'Saved' : 'Preview'}</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <CvPreview cv={cv} />
+          </div>
+          <div className="mt-4 flex shrink-0 gap-2">
+            {cv ? <Button variant="outline" className="flex-1" onClick={() => downloadCv(cv)} data-testid="button-download-generated"><Download size={15} />Download</Button> : null}
+            <Button className="flex-1" disabled={sorted.length === 0 || generate.isPending} onClick={makeCv} data-testid="button-generate-cv">
+              {generate.isPending ? <LoaderCircle size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {generate.isPending ? 'Shaping your CV…' : cv ? 'Save a new version' : 'Generate my CV'}
+            </Button>
+          </div>
+          {generate.error ? <p className="mt-2 text-center text-xs text-[#b94b43]" data-testid="status-generate-error">We couldn’t shape that version. Try again in a moment.</p> : null}
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function MessageBubble({ message }: { message: Message }) {
